@@ -1,0 +1,69 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+Vagrant.configure("2") do |config|
+
+  # dev1
+  config.vm.define "dev1" do |dev1|
+    dev1.vm.hostname = "dev1"
+    dev1.vm.box = "ubuntu1910"
+    dev1.vm.box_url = "file://ubuntu1910.box"
+    dev1.vm.synced_folder ".", "/vagrant", disabled: true
+    dev1.vm.network "forwarded_port", guest: 80, host: 8000
+    dev1.vm.provider "virtualbox" do |vb|
+      vb.name = "dev1"
+      vb.customize ["modifyvm", :id, "--memory", 2048]
+      vb.customize ["modifyvm", :id, "--cpus", 2]
+      vb.customize ["modifyvm", :id, "--nictype1", "virtio"]
+      vb.customize ["modifyvm", :id, "--audio", "none"]
+      vb.customize ["modifyvm", :id, "--usb", "off"]
+      vb.customize ["modifyvm", :id, "--vrde", "off"]
+      vb.customize ["modifyvm", :id, "--vram", "12"]
+      vb.customize ["modifyvm", :id, "--cpuexecutioncap", "50"]
+    end
+    # Do your other provisioning here ...
+    # dev1.vm.provision :shell, path: "bootstrap.sh"
+    # dev1.vm.provision "ansible" do |ansible|
+    # ansible.playbook = "provisioning/site.yml"
+    # ansible.host_key_checking = false
+    # ansible.raw_ssh_args = '-o PasswordAuthentication=no -o IdentitiesOnly=yes'  # ... etc
+    # end
+  end
+
+  # dev1
+  config.vm.define "dev2" do |dev2|
+    dev2.vm.box = "centos7.6.1810"
+    dev2.vm.box_url = "file://centos7.6.1810-parallels.box"
+    #dev2.vm.synced_folder ".", "/vagrant", disabled: true
+    dev2.vm.hostname = "dev2"
+    dev2.vm.network "forwarded_port", guest: 80, host: 8000
+    dev2.vm.network "private_network", type: "dhcp"
+    dev2.vm.provider "parallels" do |prl|
+      prl.name = "dev1"
+      prl.check_guest_tools = false
+      prl.memory = 1024
+      prl.cpus = 1
+      #prl.customize ["set", :id, "--memory", 1024]
+    end
+    # Do your other provisioning here ...
+    # dev2.vm.provision :shell, path: "bootstrap.sh"
+    # dev2.vm.provision "ansible" do |ansible|
+    # ansible.playbook = "provisioning/site.yml"
+    # ansible.host_key_checking = false
+    # ansible.raw_ssh_args = '-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PasswordAuthentication=no -o IdentitiesOnly=yes'
+    # end
+  end
+
+  # Dev3
+  # config.vm.hostname = "centos7"
+  # config.vm.box = "centos7"
+  # config.vm.box_url = "file://centos7.box"
+  # config.vm.synced_folder ".", "/vagrant", disabled: true
+  # config.vm.provider "virtualbox" do |v|
+  #  v.name = "centos7"
+  #  v.memory = "4096"
+  #  v.cpus = "2"
+  #  v.default_nic_type = "virtio"
+  #  v.customize ["modifyvm", :id, "--cpuexecutioncap", "50"]    
+  # end
+
+end

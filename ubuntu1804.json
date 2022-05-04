@@ -1,0 +1,82 @@
+{
+  "variables": {
+    "vm_name": "ubuntu1804",
+    "ssh_user": "vmuser",
+    "ssh_pass": "password"
+  },
+  "builders": [
+    {
+      "type": "virtualbox-iso",
+      "headless": "true",
+      "guest_os_type": "Ubuntu_64",
+      "iso_url": "http://cdimage.ubuntu.com/ubuntu/releases/bionic/release/ubuntu-18.04.4-server-amd64.iso",
+      "iso_checksum": "e2ecdace33c939527cbc9e8d23576381c493b071107207d2040af72595f8990b",
+      "iso_checksum_type": "sha256",
+      "vm_name": "{{user `vm_name`}}",
+      "ssh_username": "{{user `ssh_user`}}",
+      "ssh_password": "{{user `ssh_pass`}}",
+      "ssh_timeout": "10m",
+      "ssh_handshake_attempts" : "20",
+      "ssh_pty": "true",
+      "format": "ova",
+      "disk_size": "8192",
+      "hard_drive_interface": "sata",
+      "sata_port_count": "4",
+      "http_directory": "http",
+      "boot_command": [
+        "<enter><wait>",
+        "<f6><wait><esc><wait>",
+        "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+        "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+        "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+        "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+        "/install/vmlinuz noapic <wait>",
+        "auto <wait>",
+        "console-setup/ask_detect=false <wait>",
+        "console-setup/layoutcode=us <wait>",
+        "console-setup/modelcode=pc105 <wait>",
+        "debconf/frontend=noninteractive <wait>",
+        "debian-installer=en_US <wait>",
+        "fb=false <wait>",
+        "initrd=/install/initrd.gz <wait>",
+        "kbd-chooser/method=us <wait>",
+        "keyboard-configuration/layout=USA <wait>",
+        "keyboard-configuration/variant=USA <wait>",
+        "locale=en_US <wait>",
+        "netcfg/get_domain=vm <wait>",
+        "netcfg/get_hostname={{user `vm_name`}} <wait>",
+        "grub-installer/bootdev=/dev/sda <wait>",
+        "preseed/url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg ",
+        "-- <wait>",
+        "<enter><wait>"
+      ],
+      "shutdown_command": "echo '{{user `ssh_pass`}}' | sudo -S shutdown -P now",
+      "memory": "1024"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "./scripts/vmnet",
+      "destination": "/home/{{user `ssh_user`}}/"
+    },    
+    {
+      "type": "shell",
+      "environment_vars": [
+        "DEBIAN_FRONTEND=noninteractive",
+        "UPDATE=true",
+        "DISABLE_IPV6=true",
+        "VM_NAME={{user `vm_name`}}",
+        "SSH_USERNAME={{user `ssh_user`}}",
+        "SSH_PASSWORD={{user `ssh_pass`}}"
+      ],      
+      "execute_command": "echo '{{user `ssh_pass`}}' | {{.Vars}} sudo -S -E bash '{{.Path}}'",
+      "expect_disconnect": true,
+      "scripts": [
+        "scripts/ubuntu-update.sh",
+        "scripts/ubuntu-setup.sh",
+        "scripts/ubuntu-cleanup.sh"
+      ]
+    }
+  ]
+}

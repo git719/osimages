@@ -1,0 +1,8 @@
+*.box
+*.ova
+*~
+.vagrant/
+crash.log
+images/
+output-*
+packer_cache/

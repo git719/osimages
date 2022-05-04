@@ -1,0 +1,133 @@
+#!/bin/bash
+# /usr/local/bin/vmnet
+# Set up networking for VMs managed by https://github.com/lencap/{vm|vmc} utilities
+# Set this file to run on boot with systemd:
+#   cp vmnet.service /etc/systemd/system/vmnet.service
+#   systemd enable vmnet.service
+
+OSDist=$(hostnamectl | awk '/Operating System/ {print $3}' | tr 'A-Z' 'a-z')
+vmName=$(sudo VBoxControl guestproperty get '/vm/name' | awk '/^Value/ {print $2}')
+vmIP=$(sudo VBoxControl guestproperty get '/vm/ip' | awk '/^Value/ {print $2}')
+netType=$(sudo VBoxControl guestproperty get '/vm/nettype' | awk '/^Value/ {print $2}')
+[[ "$netType" != "bri" ]] && netType="ho"   # Default to HostOnly no matter what
+echo "==> OS        = [$OSDist]"
+echo "==> Hostname  = [$vmName]"
+echo "==> IPAddress = [$vmIP]"
+echo "==> NetType   = [$netType]"
+[[ -z "$vmName" ]] && echo "VBoxControl guestproperty get '/vm/name' is empty." && exit 1
+[[ -z "$vmIP" ]] && echo "VBoxControl guestproperty get '/vm/ip' is empty." && exit 1
+
+gateWay=${vmIP%.*}.1   # For Bridge networking, we'll assume 1st IP is both gateway and DNS
+
+if [[ "$OSDist" == "centos" ]]; then
+    OSVer=$(hostnamectl | awk '/Operating System/ {print $5}')
+    echo "==> OSVer     = [$OSVer]"
+    [[ "$OSVer" -lt "7" ]] && echo "FATAL: Only CentOS v7 and above are supported." && exit 1
+    echo "==> Configuring CentOS network"
+    if [[ "$OSVer" == "7" ]]; then
+        sudo systemctl stop NetworkManager
+        sudo systemctl disable NetworkManager
+        sudo systemctl stop network
+    else
+        sudo systemctl stop NetworkManager
+    fi
+    for n in $(ip l | awk '/^[0-9]/ {print $2}') ; do
+        if [[ "$n" == "eth0:" ]]; then
+            ip link set eth0 down && ip link set eth0 name enp0s3  # Force new name
+            sudo rm -f /etc/sysconfig/network-scripts/ifcfg-eth0   # Cleanup
+        fi
+        if [[ "$n" == "eth1:" ]]; then
+            ip link set eth1 down && ip link set eth1 name enp0s8
+            sudo rm -f /etc/sysconfig/network-scripts/ifcfg-eth1
+        fi
+    done
+    nic0=enp0s3 ; nic1=enp0s8
+    nic0File=/etc/sysconfig/network-scripts/ifcfg-$nic0
+    nic1File=/etc/sysconfig/network-scripts/ifcfg-$nic1
+    NM="no"
+    [[ "$OSVer" != "7" ]] && NM="yes"
+    if [[ "$netType" == "bri" ]]; then
+        echo "==> Configuring $nic0 as DISABLED"
+        echo "==> Configuring $nic1 with static IP $vmIP in Bridged mode"
+        ip link set $nic0 down
+        sudo rm -f $nic0File
+        echo "DEVICE=\"$nic1\"" > $nic1File
+        echo "BOOTPROTO=\"static\"" >> $nic1File
+        echo "ONBOOT=\"yes\"" >> $nic1File
+        echo "NM_CONTROLLED=\"$NM\"" >> $nic1File
+        echo "IPADDR=\"$vmIP\"" >> $nic1File
+        echo "NETMASK=\"255.255.255.0\"" >> $nic1File
+        MAC=$(cat /sys/class/net/$nic1/address)
+        echo "HWADDR=\"$MAC\"" >> $nic1File
+        echo "GATEWAY=\"$gateWay\"" >> $nic1File
+        echo "DNS1=\"$gateWay\"" >> $nic1File
+    else
+        echo "==> Configuring $nic0 as DHCP client in NAT mode"
+        echo "==> Configuring $nic1 with static IP $vmIP in HostOnly mode"
+        # DHCP should have already configured NIC0
+        echo "DEVICE=\"$nic0\"" > $nic0File
+        echo "BOOTPROTO=\"dhcp\"" >> $nic0File
+        echo "ONBOOT=\"yes\"" >> $nic0File
+        echo "NM_CONTROLLED=\"$NM\"" >> $nic1File
+        MAC=$(cat /sys/class/net/$nic0/address)
+        echo "HWADDR=\"$MAC\"" >> $nic0File
+        echo "DEVICE=\"$nic1\"" > $nic1File
+        echo "BOOTPROTO=\"static\"" >> $nic1File
+        echo "ONBOOT=\"yes\"" >> $nic1File
+        echo "NM_CONTROLLED=\"$NM\"" >> $nic1File
+        echo "IPADDR=\"$vmIP\"" >> $nic1File
+        echo "NETMASK=\"255.255.255.0\"" >> $nic1File
+        MAC=$(cat /sys/class/net/$nic1/address)
+        echo "HWADDR=\"$MAC\"" >> $nic1File
+    fi
+    if [[ "$OSVer" == "7" ]]; then
+        sudo systemctl start network
+    else
+        sudo systemctl start NetworkManager
+    fi
+elif [[ "$OSDist" == "ubuntu" ]]; then
+    OSVer=$(hostnamectl | awk '/Operating System/ {print $4}') ; OSVer=${OSVer%%.*}
+    echo "==> OSVer     = [$OSVer]"
+    [[ "$OSVer" -lt "18" ]] && echo "FATAL: Only Ubuntu v18 and above are supported." && exit 1
+    echo "==> Configuring Ubuntu network"
+    nic0=enp0s3 ; nic1=enp0s8
+    sudo systemctl stop systemd-networkd
+    cfg=/etc/netplan/01-netcfg.yaml
+    if [[ "$netType" == "bri" ]]; then
+        echo "==> Configuring $nic0 as DISABLED"
+        echo "==> Configuring $nic1 with static IP $vmIP in Bridged mode"
+        sudo echo "network:" > $cfg
+        sudo echo "  version: 2" >> $cfg
+        sudo echo "  renderer: networkd" >> $cfg
+        sudo echo "  ethernets:" >> $cfg
+        sudo echo "    $nic1:" >> $cfg
+        sudo echo "      addresses: [$vmIP/24]" >> $cfg
+        sudo echo "      gateway4: $gateWay" >> $cfg
+        sudo echo "      nameservers:" >> $cfg
+        sudo echo "        addresses: [$gateWay]" >> $cfg
+    else
+        echo "==> Configuring $nic0 as DHCP client in NAT mode"
+        echo "==> Configuring $nic1 with static IP $vmIP in HostOnly mode"
+        sudo echo "network:" > $cfg
+        sudo echo "  version: 2" >> $cfg
+        sudo echo "  renderer: networkd" >> $cfg
+        sudo echo "  ethernets:" >> $cfg
+        sudo echo "    $nic0:" >> $cfg
+        sudo echo "      dhcp4: yes" >> $cfg
+        sudo echo "    $nic1:" >> $cfg
+        sudo echo "      addresses: [$vmIP/24]" >> $cfg
+    fi
+    sudo systemctl start systemd-networkd
+    sudo netplan apply
+else
+    echo "==> FATAL: Unsupported OS. Giving up on network and hostname set up!"
+    exit 1
+fi
+
+echo "==> Updating hostname"
+sudo hostnamectl set-hostname $vmName
+sed -i "/^127\.0\.1\.1.*/d" /etc/hosts
+echo "127.0.1.1       $vmName" >> /etc/hosts
+
+echo "==> Done"
+exit 0

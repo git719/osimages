@@ -1,0 +1,13 @@
+#cloud-config
+autoinstall:
+  version: 1
+  storage:
+    layout:
+      name: direct
+  ssh:
+    install-server: true
+    allow-pw: true
+  identity:
+    hostname: ubuntu2004
+    password: $1$SaltSalt$Nos71yblHcV.MLJOq5Njp.
+    username: vmuser

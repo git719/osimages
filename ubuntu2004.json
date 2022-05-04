@@ -1,0 +1,61 @@
+{
+  "variables": {
+    "vm_name": "ubuntu2004",
+    "ssh_user": "vmuser",
+    "ssh_pass": "password"
+  },
+  "builders": [
+    {
+      "type": "virtualbox-iso",
+      "headless": "true",
+      "guest_os_type": "Ubuntu_64",
+      "iso_url": "https://releases.ubuntu.com/20.04/ubuntu-20.04-live-server-amd64.iso",
+      "iso_checksum": "caf3fd69c77c439f162e2ba6040e9c320c4ff0d69aad1340a514319a9264df9f",
+      "iso_checksum_type": "sha256",
+      "vm_name": "{{user `vm_name`}}",
+      "ssh_username": "{{user `ssh_user`}}",
+      "ssh_password": "{{user `ssh_pass`}}",
+      "ssh_timeout": "10m",
+      "ssh_handshake_attempts" : "20",
+      "ssh_pty": "true",
+      "format": "ova",
+      "disk_size": "8192",
+      "hard_drive_interface": "sata",
+      "sata_port_count": "4",
+      "http_directory": "http",
+      "boot_command": [
+        "<esc> <wait><esc> <wait><f6> <wait><esc> <wait>",
+        "<bs><bs><bs><bs><bs>",
+        "autoinstall ds=nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ",
+        "--- <enter>"
+      ],
+      "shutdown_command": "echo '{{user `ssh_pass`}}' | sudo -S shutdown -P now",
+      "memory": "1024"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "./scripts/vmnet",
+      "destination": "/home/{{user `ssh_user`}}/"
+    }, 
+    {
+      "type": "shell",
+      "environment_vars": [
+        "DEBIAN_FRONTEND=noninteractive",
+        "UPDATE=true",
+        "DISABLE_IPV6=true",
+        "VM_NAME={{user `vm_name`}}",
+        "SSH_USERNAME={{user `ssh_user`}}",
+        "SSH_PASSWORD={{user `ssh_pass`}}"
+      ],      
+      "execute_command": "echo '{{user `ssh_pass`}}' | {{.Vars}} sudo -S -E bash '{{.Path}}'",
+      "expect_disconnect": true,
+      "scripts": [
+        "scripts/ubuntu-update.sh",
+        "scripts/ubuntu-setup.sh",
+        "scripts/ubuntu-cleanup.sh"
+      ]
+    }
+  ]
+}

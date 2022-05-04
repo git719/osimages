@@ -1,0 +1,55 @@
+{
+  "variables": {
+    "vm_name": "centos71908",
+    "ssh_user": "vmuser",
+    "ssh_pass": "password"
+  },
+  "builders": [
+    {
+      "type": "virtualbox-iso",
+      "headless": "true",
+      "guest_os_type": "RedHat_64",
+      "iso_url": "https://mirror.umd.edu/centos/7/isos/x86_64/CentOS-7-x86_64-Minimal-1908.iso",
+      "iso_checksum": "9a2c47d97b9975452f7d582264e9fc16d108ed8252ac6816239a3b58cef5c53d",
+      "iso_checksum_type": "sha256",
+      "vm_name": "{{user `vm_name`}}",
+      "ssh_username": "{{user `ssh_user`}}",
+      "ssh_password": "{{user `ssh_pass`}}",      
+      "ssh_timeout": "10m",
+      "ssh_handshake_attempts" : "20",
+      "ssh_pty": "true",
+      "format": "ova",
+      "disk_size": "8192",
+      "hard_drive_interface": "sata",
+      "sata_port_count": "4",
+      "http_directory": "http",
+      "boot_command": [
+        "<esc><wait>linux ks=http://{{.HTTPIP}}:{{.HTTPPort}}/ks.cfg<enter><wait>"
+      ],
+      "shutdown_command": "echo '{{user `ssh_pass`}}' | sudo -S shutdown -P now",
+      "memory": "1024"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "./scripts/vmnet",
+      "destination": "/home/{{user `ssh_user`}}/"
+    },
+    {
+      "type": "shell",
+      "environment_vars": [
+        "DISABLE_IPV6=true",
+        "VM_NAME={{user `vm_name`}}",
+        "SSH_USERNAME={{user `ssh_user`}}",
+        "SSH_PASSWORD={{user `ssh_pass`}}"
+      ],      
+      "execute_command": "echo '{{user `ssh_pass`}}' | {{.Vars}} sudo -S -E bash '{{.Path}}'",
+      "expect_disconnect": true,
+      "scripts": [
+        "scripts/centos-update.sh",
+        "scripts/centos-setup.sh"
+      ]
+    }
+  ]
+}
