@@ -1,0 +1,6 @@
+#cloud-config
+password: ubuntu
+chpasswd: { expire: False }
+ssh_pwauth: True
+ssh_authorized_keys:
+  - 'ssh-ed25519 SOME-key...'
